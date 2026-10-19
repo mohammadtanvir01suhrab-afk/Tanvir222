@@ -1,0 +1,104 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'mohammadtanvir01suhrab@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'coins', 'currentLevel', 'highestUnlockedLevel', 'totalScore', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() > 0
+        && data.displayName is string
+        && data.displayName.size() <= 100
+        && data.email is string
+        && (!('photoUrl' in data) || data.photoUrl is string)
+        && data.coins is int
+        && data.coins >= 0
+        && data.currentLevel is int
+        && data.currentLevel >= 1 && data.currentLevel <= 100
+        && data.highestUnlockedLevel is int
+        && data.highestUnlockedLevel >= 1 && data.highestUnlockedLevel <= 100
+        && data.totalScore is int
+        && data.totalScore >= 0
+        && data.createdAt is timestamp
+        && data.createdAt <= request.time
+        && data.updatedAt is timestamp
+        && data.updatedAt <= request.time;
+    }
+
+    function isValidCoinTransaction(data) {
+      return data.keys().hasAll(['id', 'adminUid', 'adminEmail', 'targetUid', 'amount', 'timestamp'])
+        && data.id is string
+        && data.adminUid is string
+        && data.adminUid == request.auth.uid
+        && data.adminEmail is string
+        && data.targetUid is string
+        && data.targetUid.size() > 0
+        && data.amount is int
+        && data.amount > 0
+        && (!('note' in data) || data.note is string)
+        && data.timestamp is timestamp
+        && data.timestamp <= request.time;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt'])
+        && data.uid is string
+        && data.email is string
+        && data.role is string
+        && data.createdAt is timestamp
+        && data.createdAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId)
+        && isValidUser(request.resource.data)
+        && request.resource.data.uid == userId
+        && request.resource.data.coins == 100;
+      allow update: if (
+        isOwner(userId)
+        && isValidUser(request.resource.data)
+        && request.resource.data.uid == userId
+        && request.resource.data.coins <= resource.data.coins
+        && request.resource.data.createdAt == resource.data.createdAt
+      ) || (
+        isAdmin()
+        && isValidUser(request.resource.data)
+        && request.resource.data.uid == userId
+      );
+      allow delete: if false;
+    }
+
+    match /admins/{adminId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isValidAdmin(request.resource.data) && (
+        isAdmin() ||
+        (request.auth.token.email == 'mohammadtanvir01suhrab@gmail.com' && request.auth.uid == adminId) ||
+        (request.resource.data.role == 'admin' && request.auth.uid == adminId)
+      );
+      allow delete: if false;
+    }
+
+    match /coin_transactions/{transactionId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.targetUid == request.auth.uid);
+      allow create: if isAdmin()
+        && isValidCoinTransaction(request.resource.data)
+        && request.resource.data.id == transactionId;
+      allow update, delete: if false;
+    }
+  }
+}

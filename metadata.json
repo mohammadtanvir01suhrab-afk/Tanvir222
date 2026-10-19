@@ -1,0 +1,8 @@
+{
+  "name": "Tanvir Candy Crush",
+  "description": "Colorful 100-level candy matching puzzle game with Google Sign-In, player profile, and admin coin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
